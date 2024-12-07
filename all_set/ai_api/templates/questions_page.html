@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Questions</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        body {
+            font-family: "Comic Sans MS", sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            padding: 20px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .question-card {
+            margin: 20px 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+        .question-title {
+            font-size: 18px;
+        }
+        button {
+            padding: 10px 15px;
+            font-size: 14px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            width: 150px;
+        }
+        .play-btn {
+            background-color: #007bff;
+            color: white;
+        }
+        .play-btn.active {
+            background-color: #ffc107;
+        }
+        .record-btn {
+            background-color: #28a745;
+            color: white;
+            transition: all 0.5s ease;
+        }
+        .record-btn.recording {
+            background-color: #ffc107;
+            transform: scale(1.1);
+            animation: pulse 1s infinite;
+        }
+        .record-btn.recorded {
+            background-color: #dc3545;
+        }
+        .record-btn.disabled {
+            background-color: #d3d3d3;
+            cursor: not-allowed;
+        }
+        .submit-btn {
+            background-color: #28a745; /* Green */
+            color: white;
+        }
+        .submit-btn.disabled {
+            background-color: #d3d3d3;
+            cursor: not-allowed;
+        }
+        .feedback-btn {
+            background-color: #800080; /* Purple */
+            color: white;
+        }
+        .submit-btn.submitting {
+            background-color: #d3d3d3; /* Gray for submitting */
+            cursor: not-allowed;
+        }
+        .navigation button {
+            background-color: transparent;
+            border: 1px solid black;
+            color: black;
+            cursor: pointer;
+        }
+        .navigation button.disabled {
+            border-color: #d3d3d3;
+            cursor: not-allowed;
+        }
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.1);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Answer the Questions</h1>
+        <div id="question-card" class="question-card">
+            <!-- Dynamic content will load here -->
+        </div>
+        <div class="navigation">
+            <button id="prev-btn" class="disabled" onclick="showPrevious()">Previous</button>
+            <button id="next-btn" onclick="showNext()">Next</button>
+        </div>
+    </div>
+
+    <script>
+        const questions = [];
+        let currentQuestionIndex = 0;
+        const recordedAudios = {};
+        const feedbackAudios = {};
+        const cardStates = {}; // Stores state for each card
+        let currentAudio = null;
+
+        async function loadQuestions() {
+            const questionsZipUrl = localStorage.getItem('questions_zip');
+            if (!questionsZipUrl) {
+                alert("No questions found. Please upload your resume.");
+                window.location.href = "/";
+                return;
+            }
+
+            try {
+                const response = await fetch(questionsZipUrl);
+                const zipBlob = await response.blob();
+                const zip = await JSZip.loadAsync(zipBlob);
+
+                for (const [fileName, file] of Object.entries(zip.files)) {
+                    if (fileName.endsWith(".mp3")) {
+                        const audioBlob = await file.async("blob");
+                        const audioFile = new File([audioBlob], fileName, { type: "audio/mpeg" });
+                        const formattedTitle = formatTitle(fileName.replace(".mp3", ""));
+                        questions.push({
+                            title: formattedTitle,
+                            audioUrl: URL.createObjectURL(audioFile),
+                        });
+                    }
+                }
+
+                if (questions.length > 0) displayQuestion();
+            } catch (error) {
+                console.error("Failed to load questions:", error);
+                alert("Error loading questions. Please try again.");
+            }
+        }
+
+        function formatTitle(rawTitle) {
+            const parts = rawTitle.split("_");
+            const number = parts[0];
+            const title = parts.slice(1).join(" ").replace(/_/g, " ");
+            return `${number}) ${title}`;
+        }
+
+        function displayQuestion() {
+            const question = questions[currentQuestionIndex];
+            const questionCard = document.getElementById("question-card");
+
+            // Load state if exists, otherwise initialize
+            const state = cardStates[currentQuestionIndex] || {
+                recorded: false,
+                submitted: false,
+                submitting: false,
+                feedbackUrl: null,
+            };
+
+            questionCard.innerHTML = `
+                <div class="question-title">${question.title}</div>
+                <button id="play-question-btn" class="play-btn" onclick="toggleAudio('${question.audioUrl}', 'play-question-btn')">Play Question</button>
+                <button id="record-btn" class="record-btn ${state.submitted ? "disabled" : state.recorded ? "recorded" : ""}" ${state.submitted ? "disabled" : ""} onclick="toggleRecording()">${state.recorded ? "Rerecord" : "Record Answer"}</button>
+                <button id="submit-btn" class="${state.feedbackUrl ? "feedback-btn" : state.recorded ? "submit-btn" : "submit-btn disabled"}" ${state.recorded ? "" : "disabled"} onclick="${state.feedbackUrl ? `toggleAudio('${state.feedbackUrl}', 'submit-btn')` : `submitAnswer(${currentQuestionIndex})`}">
+                    ${state.feedbackUrl ? "Play Feedback" : state.submitting ? "Submitting..." : "Submit Answer"}
+                </button>
+            `;
+
+            updateNavigation();
+        }
+
+        function updateNavigation() {
+            document.getElementById("prev-btn").classList.toggle("disabled", currentQuestionIndex === 0);
+            document.getElementById("next-btn").classList.toggle("disabled", currentQuestionIndex === questions.length - 1);
+        }
+
+        function showPrevious() {
+            if (currentQuestionIndex > 0) {
+                stopCurrentAudio();
+                currentQuestionIndex--;
+                displayQuestion();
+            }
+        }
+
+        function showNext() {
+            if (currentQuestionIndex < questions.length - 1) {
+                stopCurrentAudio();
+                currentQuestionIndex++;
+                displayQuestion();
+            }
+        }
+
+        function stopCurrentAudio() {
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
+                const playButton = document.getElementById("play-question-btn");
+                if (playButton) playButton.textContent = "Play Question";
+                currentAudio = null;
+            }
+        }
+
+        function toggleAudio(audioUrl, buttonId) {
+            const button = document.getElementById(buttonId);
+            if (!currentAudio) {
+                currentAudio = new Audio(audioUrl);
+                currentAudio.play();
+                button.textContent = "Pause";
+                button.classList.add("active");
+                currentAudio.onended = () => {
+                    button.textContent = buttonId === "play-question-btn" ? "Play Question" : "Play Feedback";
+                    button.classList.remove("active");
+                    currentAudio = null;
+                };
+            } else {
+                currentAudio.pause();
+                currentAudio = null;
+                button.textContent = buttonId === "play-question-btn" ? "Play Question" : "Play Feedback";
+                button.classList.remove("active");
+            }
+        }
+
+        let mediaRecorder = null;
+        let audioChunks = [];
+
+        function toggleRecording() {
+            stopCurrentAudio(); // Stop any playing audio before recording
+            const recordButton = document.getElementById("record-btn");
+            if (recordButton.classList.contains("recording")) {
+                stopRecording(recordButton);
+            } else {
+                startRecording(recordButton);
+            }
+        }
+
+        function startRecording(recordButton) {
+            navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                mediaRecorder.start();
+                recordButton.textContent = "Stop Recording";
+                recordButton.classList.add("recording");
+
+                mediaRecorder.addEventListener("dataavailable", (event) => {
+                    audioChunks.push(event.data);
+                });
+            });
+        }
+
+        function stopRecording(recordButton) {
+            if (mediaRecorder) {
+                mediaRecorder.stop();
+                mediaRecorder.addEventListener("stop", () => {
+                    const audioBlob = new Blob(audioChunks, { type: "audio/wav" });
+                    recordedAudios[currentQuestionIndex] = audioBlob;
+
+                    recordButton.textContent = "Rerecord";
+                    recordButton.classList.remove("recording");
+                    recordButton.classList.add("recorded");
+
+                    // Update state
+                    cardStates[currentQuestionIndex] = {
+                        ...cardStates[currentQuestionIndex],
+                        recorded: true,
+                    };
+
+                    const submitButton = document.getElementById("submit-btn");
+                    submitButton.classList.remove("disabled");
+                    submitButton.classList.add("submit-btn");
+                    submitButton.disabled = false;
+                });
+            }
+        }
+
+        async function submitAnswer(index) {
+            const audioBlob = recordedAudios[index];
+            if (!audioBlob) {
+                alert("Please record your answer first.");
+                return;
+            }
+
+            // Update state for submission in progress
+            cardStates[index] = {
+                ...cardStates[index],
+                submitting: true,
+            };
+
+            const submitButton = document.getElementById("submit-btn");
+            if (currentQuestionIndex === index) {
+                submitButton.textContent = "Submitting...";
+                submitButton.classList.add("submitting");
+                submitButton.disabled = true;
+            }
+
+            const formData = new FormData();
+            formData.append("audio_answer", audioBlob);
+            formData.append("question", questions[index].title);
+
+            try {
+                const response = await fetch("/api/evaluate-answer/", { method: "POST", body: formData });
+                if (response.ok) {
+                    const feedbackBlob = await response.blob();
+                    const feedbackUrl = URL.createObjectURL(feedbackBlob);
+                    feedbackAudios[index] = feedbackUrl;
+
+                    cardStates[index] = {
+                        ...cardStates[index],
+                        feedbackUrl,
+                        submitted: true,
+                        submitting: false,
+                    };
+
+                    if (currentQuestionIndex === index) {
+                        submitButton.textContent = "Play Feedback";
+                        submitButton.className = "feedback-btn";
+                        submitButton.disabled = false;
+                        submitButton.onclick = () => toggleAudio(feedbackUrl, "submit-btn");
+                    }
+                } else {
+                    alert("Error submitting answer.");
+                }
+            } catch (error) {
+                alert("Submission failed. Please try again.");
+            } finally {
+                cardStates[index] = {
+                    ...cardStates[index],
+                    submitting: false,
+                };
+
+                if (currentQuestionIndex === index) {
+                    displayQuestion(); // Refresh current question state
+                }
+            }
+        }
+
+        loadQuestions();
+    </script>
+</body>
+</html>

@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Answer the Questions</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 0;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-top: 20px;
+        }
+        #questions-container {
+            max-width: 1000px;
+            margin: 30px auto;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .question-item {
+            flex: 1 1 calc(25% - 20px);
+            max-width: calc(25% - 20px);
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        .question-item h3 {
+            margin-bottom: 15px;
+            color: #444;
+        }
+        .question-item audio {
+            width: 100%;
+            margin-top: 10px;
+            max-width: 200px;
+            height: 40px;
+        }
+        .question-item button {
+            margin: 5px 0;
+            padding: 8px 16px;
+            font-size: 14px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 200px;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+            box-sizing: border-box;
+        }
+        .record-btn {
+            background-color: #28a745; /* Green */
+            color: white;
+        }
+        .record-btn.recording {
+            background-color: #dc3545; /* Red */
+        }
+        .record-btn.rerecord {
+            background-color: #ffc107; /* Yellow */
+        }
+        .submit-btn {
+            background-color: #007bff; /* Blue */
+            color: white;
+            position: relative;
+        }
+        .submit-btn.loading {
+            pointer-events: none;
+            background-color: #d3d3d3;
+        }
+        .submit-btn.loading span {
+            margin-left: 10px;
+        }
+        .submit-btn.loading .loader {
+            margin-right: 5px;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #28a745;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @media (max-width: 768px) {
+            .question-item {
+                flex: 1 1 calc(50% - 20px);
+                max-width: calc(50% - 20px);
+            }
+        }
+        @media (max-width: 480px) {
+            .question-item {
+                flex: 1 1 100%;
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Answer the Questions</h1>
+    <div id="questions-container">
+        <!-- Questions will be dynamically added here -->
+    </div>
+
+    <script>
+        let mediaRecorder = null;
+        let audioChunks = [];
+        const recordedAudios = {};
+
+        async function loadQuestions() {
+            const questionsZipUrl = localStorage.getItem('questions_zip');
+            if (!questionsZipUrl) {
+                alert("No questions found. Please go back and upload your resume.");
+                window.location.href = '/';
+                return;
+            }
+
+            try {
+                const response = await fetch(questionsZipUrl);
+                if (!response.ok) throw new Error("Failed to fetch ZIP file.");
+
+                const zipBlob = await response.blob();
+                const zip = await JSZip.loadAsync(zipBlob);
+
+                const container = document.getElementById('questions-container');
+                let questionIndex = 1;
+
+                for (const [fileName, file] of Object.entries(zip.files)) {
+                    if (fileName.endsWith('.mp3')) {
+                        const audioBlob = await file.async('blob');
+                        const audioFile = new File([audioBlob], `question_${questionIndex}.mp3`, { type: "audio/mpeg" });
+                        const audioUrl = URL.createObjectURL(audioFile);
+
+                        const safeTitle = fileName.split('_').slice(1).join(' ').replace('.mp3', '');
+
+                        const questionDiv = document.createElement('div');
+                        questionDiv.classList.add('question-item');
+                        questionDiv.innerHTML = `
+                            <h3>${safeTitle}</h3>
+                            <audio controls src="${audioUrl}"></audio>
+                            <button class="record-btn" id="record-btn-${questionIndex}" onclick="toggleRecording(${questionIndex})">
+                                Record Answer
+                            </button>
+                            <audio id="answer-audio-${questionIndex}" controls></audio>
+                            <button class="submit-btn" id="submit-btn-${questionIndex}" onclick="submitAnswer(${questionIndex})">Submit Answer</button>
+                            <audio id="evaluation-audio-${questionIndex}" controls></audio>
+                        `;
+                        container.appendChild(questionDiv);
+                        questionIndex++;
+                    }
+                }
+            } catch (error) {
+                alert('Error loading questions: ' + error.message);
+                console.error(error);
+            }
+        }
+
+        function toggleRecording(questionIndex) {
+            const recordButton = document.getElementById(`record-btn-${questionIndex}`);
+            if (recordButton.classList.contains('recording')) {
+                stopRecording(questionIndex, recordButton);
+            } else {
+                startRecording(questionIndex, recordButton);
+            }
+        }
+
+        function startRecording(questionIndex, recordButton) {
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+                    mediaRecorder.start();
+
+                    recordButton.textContent = "Stop Recording";
+                    recordButton.classList.add('recording');
+
+                    mediaRecorder.addEventListener('dataavailable', event => {
+                        audioChunks.push(event.data);
+                    });
+                })
+                .catch(error => {
+                    alert('Microphone access denied: ' + error.message);
+                    console.error(error);
+                });
+        }
+
+        function stopRecording(questionIndex, recordButton) {
+            if (mediaRecorder) {
+                mediaRecorder.stop();
+                mediaRecorder.addEventListener('stop', () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+
+                    if (audioBlob.size === 0) {
+                        alert("Recorded audio is empty. Please check your microphone and try again.");
+                        return;
+                    }
+
+                    recordedAudios[questionIndex] = audioBlob;
+
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const answerAudio = document.getElementById(`answer-audio-${questionIndex}`);
+                    answerAudio.src = audioUrl;
+
+                    recordButton.textContent = "Rerecord Answer";
+                    recordButton.classList.remove('recording');
+                    recordButton.classList.add('rerecord');
+                });
+            }
+        }
+
+        async function submitAnswer(questionIndex) {
+            const audioBlob = recordedAudios[questionIndex];
+            const submitButton = document.getElementById(`submit-btn-${questionIndex}`);
+
+            if (!audioBlob) {
+                alert('Please record your answer first.');
+                return;
+            }
+
+            submitButton.innerHTML = `<span class="loader"></span><span>Submitting...</span>`;
+            submitButton.classList.add('loading');
+            submitButton.disabled = true;
+
+            const formData = new FormData();
+            formData.append('audio_answer', audioBlob);
+            formData.append('question', `Question ${questionIndex}`);
+
+            try {
+                const response = await fetch('/api/evaluate-answer/', { method: 'POST', body: formData });
+                if (response.ok) {
+                    const evaluationBlob = await response.blob();
+                    const evaluationUrl = URL.createObjectURL(evaluationBlob);
+
+                    const evaluationAudio = document.getElementById(`evaluation-audio-${questionIndex}`);
+                    evaluationAudio.src = evaluationUrl;
+                } else {
+                    const errorData = await response.json();
+                    alert('Error evaluating answer: ' + (errorData.error || 'Unknown error.'));
+                }
+            } catch (error) {
+                alert('Error submitting answer: ' + error.message);
+            } finally {
+                submitButton.innerHTML = `Submit Answer`;
+                submitButton.classList.remove('loading');
+                submitButton.disabled = false;
+            }
+        }
+
+        loadQuestions();
+    </script>
+</body>
+</html>

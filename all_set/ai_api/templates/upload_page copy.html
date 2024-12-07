@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mock Interview Questions</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 0;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-top: 20px;
+        }
+        form {
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        label {
+            font-weight: bold;
+            color: #555;
+        }
+        input, textarea, button {
+            display: block;
+            width: 100%;
+            margin: 10px 0 20px;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        input[type="file"] {
+            padding: 5px;
+        }
+        button {
+            background-color: #4caf50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button.loading {
+            pointer-events: none;
+            background-color: #d3d3d3;
+        }
+        button.loading span {
+            margin-left: 10px;
+        }
+        .loader {
+            border: 4px solid #f3f3f3; /* Light grey */
+            border-top: 4px solid #4caf50; /* Green */
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+        @media (max-width: 768px) {
+            form {
+                margin: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Generate Interview Questions</h1>
+    <form id="upload-form">
+        <label for="resume">Upload Resume (PDF):</label>
+        <input type="file" id="resume" name="resume" accept=".pdf" required>
+
+        <label for="job_title">Job Title:</label>
+        <input type="text" id="job_title" name="job_title" required>
+
+        <label for="job_description">Job Description:</label>
+        <textarea id="job_description" name="job_description" rows="4" placeholder="Enter job description (optional)"></textarea>
+
+        <button type="submit" id="submit-button">
+            Generate Questions
+        </button>
+    </form>
+
+    <script>
+        const form = document.getElementById('upload-form');
+        const submitButton = document.getElementById('submit-button');
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault(); // Prevent default form submission
+
+            // Add loading state to the button
+            submitButton.innerHTML = `<div class="loader"></div><span>Generating...</span>`;
+            submitButton.classList.add('loading');
+
+            const formData = new FormData(form);
+
+            try {
+                const response = await fetch('/api/generate-questions/', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (response.ok) {
+                    const zipFile = await response.blob();
+                    const zipUrl = URL.createObjectURL(zipFile);
+
+                    // Store the ZIP file URL for use in the second page
+                    localStorage.setItem('questions_zip', zipUrl);
+
+                    // Redirect to the second page
+                    window.location.href = '/questions-page/';
+                } else {
+                    const errorData = await response.json();
+                    alert('Failed to generate questions: ' + (errorData.error || 'Unknown error.'));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                // Reset button state
+                submitButton.innerHTML = `Generate Questions`;
+                submitButton.classList.remove('loading');
+            }
+        });
+    </script>
+</body>
+</html>

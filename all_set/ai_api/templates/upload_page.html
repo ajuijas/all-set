@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Your Resume</title>
+    <style>
+        body {
+            font-family: "Comic Sans MS", sans-serif;
+            background-color: #f4f9f9;
+            margin: 0;
+            padding: 0;
+        }
+        .form-container {
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #fff;
+            border-radius: 15px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        label {
+            font-weight: bold;
+            display: block;
+            margin-bottom: 5px;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button.loading {
+            pointer-events: none;
+            background-color: #d3d3d3;
+        }
+        button.loading span {
+            margin-left: 10px;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="form-container">
+        <h1>Upload Your Resume</h1>
+        <form id="upload-form">
+            <label for="resume">Resume (PDF):</label>
+            <input type="file" id="resume" name="resume" accept=".pdf" required>
+            <label for="job-title">Job Title:</label>
+            <input type="text" id="job-title" name="job_title" required>
+            <label for="job-description">Job Description:</label>
+            <textarea id="job-description" name="job_description" rows="4"></textarea>
+            <button type="submit" id="submit-button">Generate Questions</button>
+        </form>
+    </div>
+
+    <script>
+        const form = document.getElementById('upload-form');
+        const submitButton = document.getElementById('submit-button');
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault(); // Prevent default form submission
+
+            // Add loading state to the button
+            submitButton.innerHTML = `<div class="loader"></div><span>Generating...</span>`;
+            submitButton.classList.add('loading');
+
+            const formData = new FormData();
+            const fileInput = document.getElementById('resume');
+            const jobTitleInput = document.getElementById('job-title');
+            const jobDescriptionInput = document.getElementById('job-description');
+
+            // Append the inputs to the FormData object
+            formData.append('resume', fileInput.files[0]);
+            formData.append('job_title', jobTitleInput.value);
+            formData.append('job_description', jobDescriptionInput.value);
+
+            try {
+                const response = await fetch('/api/generate-questions/', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (response.ok) {
+                    const zipFile = await response.blob();
+                    const zipUrl = URL.createObjectURL(zipFile);
+
+                    // Store the ZIP file URL for use in the questions page
+                    localStorage.setItem('questions_zip', zipUrl);
+
+                    // Redirect to the questions page
+                    window.location.href = '/questions-page/';
+                } else {
+                    const errorData = await response.json();
+                    alert('Failed to generate questions: ' + (errorData.error || 'Unknown error.'));
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                // Reset button state
+                submitButton.innerHTML = `Generate Questions`;
+                submitButton.classList.remove('loading');
+            }
+        });
+    </script>
+</body>
+</html>

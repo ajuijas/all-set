@@ -1,0 +1,12 @@
+curl -X POST http://localhost:8000/api/generate-questions/ \
+  -H "Content-Type: multipart/form-data" \
+  -F "resume=@/Users/ijasahammed/Downloads/IJAS_AHAMMED_Resume_08-04-2023-20-44-22.pdf" \
+  -F "job_title=Software Engineer" \
+  -F "job_description=Responsible for building and maintaining scalable applications" \
+  -o questions_audio.zip
+
+curl -X POST http://localhost:8000/api/get-results/ \
+  -H "Content-Type: multipart/form-data" \
+  -F "audio_answer=@/Users/ijasahammed/Downloads/strengths_sample.mp3" \
+  -F "question=What are your strengths?" \
+  --output evaluation_result.mp3

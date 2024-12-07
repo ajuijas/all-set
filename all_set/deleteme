@@ -1,0 +1,8 @@
+curl -X POST http://127.0.0.1:8000/api/generate-questions/ \
+    -F "resume=@/Users/ijasahammed/Downloads/Ijas-Ahammed-Software-Engineer-Resume.pdf" \
+    -F "job_title=Software Engineer" \
+    -F "job_description=Responsible for building and maintaining scalable systems"
+
+curl -X POST http://127.0.0.1:8000/api/get_results/ \
+    -F "question=Can you describe your experience in developing scalable systems, particularly your work with the queuing system that wrapped Kafka topics at TurboLab? What challenges did you face, and how did you overcome them?" \
+    -F "answer=I developed the queuing system which is the backbone of the web crawling system responsible for crawling about 20 million pages per day"
